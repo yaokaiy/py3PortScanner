@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64">
+  <title>pyportscanner endpoint mark</title>
+  <g fill="#D95E46">
+    <circle cx="17" cy="24" r="4.75"/>
+    <circle cx="17" cy="40" r="4.75"/>
+    <path d="M31 13h8.8l13.8 14.6a6.4 6.4 0 0 1 0 8.8L39.8 51H31l17.6-19L31 13Z"/>
+  </g>
+</svg>

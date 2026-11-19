@@ -4,6 +4,16 @@ Versions are monotonically increased based on Semantic Versioning.
 
 ***
 
+## 0.4.0
+
+- Build and install with `pyproject.toml` on Python 3.11 and newer. The package has no runtime dependencies.
+- Replace the bundled Nmap database with a built-in list of 24 TCP ports. Use an explicit list to keep the same targets across upgrades.
+- Validate ports, thread limits, and timeouts before starting a check. Fractional timeouts are supported.
+- Close sockets after setup and connection errors. Verbose output identifies results as TCP.
+- Replace Travis CI with GitHub Actions for tests, wheel and source builds, and distribution metadata checks.
+- Release verified distributions to PyPI through GitHub Actions Trusted Publishing.
+- Add an API reference, a self-contained loopback example, and a typing marker for installed packages.
+
 ## V0.3 (10/09/2018)
 
 ### Backward incompatible changes:
