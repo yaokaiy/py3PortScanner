@@ -33,7 +33,7 @@ scanner.scan(objective, message="")
 | `{8000: "CLOSE"}` | A TCP connection to port 8000 failed, timed out, or encountered a socket error. |
 | `{}` | The port list was empty, the target was invalid, or the hostname could not be resolved to IPv4. |
 
-The optional legacy `message` argument sends UTF-8 text in a UDP datagram and over successful TCP connections. A socket error while sending the message can yield `"CLOSE"`. Status reporting covers TCP connections.
+The optional legacy `message` argument attempts to send UTF-8 text in a UDP datagram. If the UDP send succeeds, it also attempts to send the text over a successful TCP connection. The result reflects the TCP connection even if a notification fails.
 
 ### Inspect or adjust a scanner
 

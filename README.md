@@ -50,14 +50,9 @@ The example output assumes a service is listening. The result uses `"CLOSE"` whe
 
 The legacy import `from pyportscanner import pyscanner` still works. Version 0.4 replaces the bundled Nmap service database with the built-in list. Pass explicit ports to keep the same targets across versions.
 
-## Develop
+## Contributing
 
-```sh
-python -m pip install -e .
-python -m unittest discover -s tests -v
-```
-
-The Python package lives in `src/pyportscanner/`, the API guide and icon in `docs/`, and runnable usage in `examples/`.
+See the [contribution guide](https://github.com/yaokaiy/py3PortScanner/blob/master/CONTRIBUTING.md) for local setup, tests, and reporting bugs.
 
 ## Build distributions
 

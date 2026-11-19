@@ -4,6 +4,11 @@ Versions are monotonically increased based on Semantic Versioning.
 
 ***
 
+## 0.4.1
+
+- Report the TCP connection result even if a legacy notification fails. Apply the configured timeout to UDP notifications.
+- Add CI and package badges to the published README and document how to contribute.
+
 ## 0.4.0
 
 - Build and install with `pyproject.toml` on Python 3.11 and newer. The package has no runtime dependencies.
