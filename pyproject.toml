@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyportscanner"
-version = "0.4.0"
+version = "0.4.1"
 description = "Check TCP port reachability on one IPv4 host with zero runtime dependencies."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -117,9 +117,27 @@ class PortScannerTest(unittest.TestCase):
         create_socket.side_effect = [tcp, udp]
         self.assertEqual(PortScanner([8000]).scan("localhost", "héllo"), {8000: "OPEN"})
         udp.sendto.assert_called_once_with("héllo".encode(), ("127.0.0.1", 8000))
+        udp.settimeout.assert_called_once_with(10)
         tcp.sendall.assert_called_once_with("héllo".encode())
         tcp.close.assert_called_once_with()
         udp.close.assert_called_once_with()
+
+    @patch("pyportscanner.pyscanner.socket.gethostbyname", return_value="127.0.0.1")
+    def test_notification_errors_preserve_the_tcp_result(self, resolve):
+        for failing_notification in ("UDP", "TCP"):
+            with self.subTest(notification=failing_notification):
+                tcp, udp = Mock(), Mock()
+                tcp.connect_ex.return_value = 0
+                send = udp.sendto if failing_notification == "UDP" else tcp.sendall
+                send.side_effect = OSError("Notification failed")
+                with patch("pyportscanner.pyscanner.socket.socket", side_effect=[tcp, udp]):
+                    self.assertEqual(PortScanner([8000]).scan("localhost", "status"), {8000: "OPEN"})
+                tcp.connect_ex.assert_called_once_with(("127.0.0.1", 8000))
+                send.assert_called_once()
+                if failing_notification == "UDP":
+                    tcp.sendall.assert_not_called()
+                tcp.close.assert_called_once_with()
+                udp.close.assert_called_once_with()
 
     def test_loopback_listener(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:

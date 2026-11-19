@@ -146,17 +146,24 @@ class PortScanner:
     def _check_port(self, ip: str, port: int, message: str) -> tuple[int, str]:
         address = (ip, port)
         payload = message.encode("utf-8", errors="replace")
+        status = "CLOSE"
 
         try:
             with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as tcp:
-                tcp.settimeout(self.timeout_val)
-                if message:
-                    with closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as udp:
-                        udp.sendto(payload, address)
-                if tcp.connect_ex(address) != 0:
-                    return port, "CLOSE"
-                if message:
-                    tcp.sendall(payload)
-                return port, "OPEN"
+                timeout = self.timeout_val
+                tcp.settimeout(timeout)
+                if payload:
+                    try:
+                        with closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as udp:
+                            udp.settimeout(timeout)
+                            udp.sendto(payload, address)
+                    except OSError:
+                        # Continue the TCP check without sending another notification.
+                        payload = b""
+                if tcp.connect_ex(address) == 0:
+                    status = "OPEN"
+                    if payload:
+                        tcp.sendall(payload)
         except OSError:
-            return port, "CLOSE"
+            pass
+        return port, status
