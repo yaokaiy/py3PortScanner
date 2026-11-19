@@ -6,11 +6,14 @@
   pyportscanner
 </h1>
 
-Check TCP port reachability on a single IPv4 host.
+[![CI status](https://github.com/yaokaiy/py3PortScanner/actions/workflows/ci.yml/badge.svg?branch=master&event=push)](https://github.com/yaokaiy/py3PortScanner/actions/workflows/ci.yml)
+[![Latest PyPI version](https://img.shields.io/pypi/v/pyportscanner)](https://pypi.org/project/pyportscanner/)
+[![Python 3.11 and newer](https://img.shields.io/badge/Python-3.11%2B-306998)](https://github.com/yaokaiy/py3PortScanner/blob/master/pyproject.toml)
+[![Apache-2.0 license](https://img.shields.io/badge/License-Apache--2.0-6b7280)](https://github.com/yaokaiy/py3PortScanner/blob/master/LICENSE)
 
-Python 3.11+ · Zero runtime dependencies
+Check TCP port reachability on a single IPv4 host using only the Python standard library.
 
-[API reference](https://github.com/yaokaiy/py3PortScanner/blob/master/docs/api.md) · [Changelog](https://github.com/yaokaiy/py3PortScanner/blob/master/CHANGELOG.md) · [PyPI](https://pypi.org/project/pyportscanner/)
+[API reference](https://github.com/yaokaiy/py3PortScanner/blob/master/docs/api.md) · [Changelog](https://github.com/yaokaiy/py3PortScanner/blob/master/CHANGELOG.md) · [Releases](https://github.com/yaokaiy/py3PortScanner/releases)
 
 ## Installation
 
