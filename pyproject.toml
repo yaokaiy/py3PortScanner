@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyportscanner"
+version = "0.4.0"
+description = "Check TCP port reachability on one IPv4 host with zero runtime dependencies."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Yaokai Yang" }]
+keywords = ["tcp", "ipv4", "port scanner", "network diagnostics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: System :: Networking :: Monitoring",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5"]
+
+[project.urls]
+Homepage = "https://github.com/yaokaiy/py3PortScanner"
+Documentation = "https://github.com/yaokaiy/py3PortScanner/blob/master/docs/api.md"
+Issues = "https://github.com/yaokaiy/py3PortScanner/issues"
+Changelog = "https://github.com/yaokaiy/py3PortScanner/blob/master/CHANGELOG.md"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.setuptools.package-data]
+pyportscanner = ["py.typed"]

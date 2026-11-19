@@ -1,14 +1,24 @@
 import unittest
-from unittest.mock import Mock, patch
 
-from os import sys, path
-sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
+from pyportscanner.etc.helper import get_domain
 
-from pyportscanner.etc import helper
 
 class HelperTest(unittest.TestCase):
     def test_get_domain(self):
-        test_url = 'https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock'
-        result = helper.get_domain(test_url)
-        self.assertEqual(result, 'docs.python.org')
+        for target, expected in (
+            ("https://docs.python.org/3/library/unittest.mock.html", "docs.python.org"),
+            (" HTTPS://LOCALHOST:8000/check ", "localhost"),
+            ("127.0.0.1", "127.0.0.1"),
+            ("localhost:8000", "localhost"),
+            ("//localhost:8000/check", "localhost"),
+        ):
+            with self.subTest(target=target):
+                self.assertEqual(get_domain(target), expected)
 
+    def test_invalid_target(self):
+        for target in (
+            "", "https://", "https://[::1", "ftp://localhost", "invalid host",
+            "localhost\0.example", "localhost:bogus", "localhost:65536", None,
+        ):
+            with self.subTest(target=target):
+                self.assertEqual(get_domain(target), "")

@@ -1,264 +1,133 @@
-import unittest
-import collections
-from unittest.mock import Mock, patch
 import socket
-from socket import error as socket_error
+import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from unittest.mock import Mock, patch
 
-from concurrent import futures
-
-from os import sys, path
-sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-
-from pyportscanner import pyscanner
-from pyportscanner.etc.service_port import ServicePort
+from pyportscanner import PortScanner, pyscanner
 
 
-@patch('pyportscanner.pyscanner.socket', autospec=True)
-@patch('pyportscanner.pyscanner.read_input', autospec=True)
 class PortScannerTest(unittest.TestCase):
-    def setUp(self):
-        self.target_ports = [80, 443]
-        self.thread_limit = 100
-        self.timeout = 10
-        port_80 = ServicePort('HTTP', 80, 'TCP', 0.1)
-        port_443 = ServicePort('TLS', 443, 'TCP', 0.09)
-        self.mock_port_list = {
-            80: port_80,
-            443: port_443,
-        }
-        self.test_ip = 'test_ip_address'
-        self.test_host = 'http://test_domain.com'
-        self.test_domain = 'test_domain.com'
+    def test_public_import(self):
+        self.assertIs(PortScanner, pyscanner.PortScanner)
 
-    def test_init_func(self, mock_read_input, mock_socket):
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        self.assertIsNotNone(scanner)
-        self.assertEqual(scanner.get_target_ports(), self.target_ports)
-        self.assertEqual(scanner.thread_limit, self.thread_limit)
-        self.assertEqual(scanner.timeout_val, self.timeout)
+    def test_port_selection(self):
+        all_ports = PortScanner().get_target_ports()
+        self.assertEqual(len(all_ports), 24)
+        self.assertEqual(all_ports, sorted(set(all_ports)))
+        self.assertEqual(PortScanner(1).get_target_ports(), [443])
+        self.assertEqual(PortScanner(2).get_target_ports(), [80, 443])
+        self.assertEqual(PortScanner().get_top_k_ports(100), all_ports)
 
-    def test_extract_list_success(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        result = scanner.extract_list(2)
-        self.assertEqual(result, [80, 443])
-        result = scanner.extract_list(1)
-        self.assertEqual(result, [80])
-
-    def text_extract_list_error(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        self.assertRaises(scanner.extract_list(-1), ValueError)
-
-    def test_get_target_ports(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
+    def test_explicit_ports_are_copied_and_deduplicated(self):
+        ports = [8443, 8000, 8443]
+        scanner = PortScanner(ports)
+        ports.clear()
         result = scanner.get_target_ports()
-        self.assertIsNotNone(result)
-        self.assertEqual(result, self.target_ports)
+        self.assertEqual(result, [8443, 8000])
+        result.clear()
+        self.assertEqual(scanner.get_target_ports(), [8443, 8000])
 
-    def test_get_top_k_ports(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        result = scanner.get_top_k_ports(2)
-        self.assertIsNotNone(result)
-        self.assertEqual(result, self.target_ports)
+    def test_invalid_ports(self):
+        for argument in ([True], ["80"], [80.0], True, 1.0, "80", (80,)):
+            with self.subTest(argument=argument), self.assertRaises(TypeError):
+                PortScanner(argument)
+        for argument in ([0], [-1], [65536], 0, -1):
+            with self.subTest(argument=argument), self.assertRaises(ValueError):
+                PortScanner(argument)
+        with self.assertRaises(ValueError):
+            PortScanner().get_top_k_ports(-1)
 
-    def test_scan_input_ip_success(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        mock_socket.inet_aton.return_value = None
-        mock_socket.gethostbyname.return_value = self.test_ip
-        mock_scan_results = {
-            80: 'OPEN',
-            443: 'CLOSE',
-        }
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        # private instance methods in python are name mangled
-        # see https://docs.python.org/3.5/tutorial/classes.html#private-variables
-        scanner._PortScanner__scan_ports = Mock(return_value=mock_scan_results)
-        result = scanner.scan(self.test_ip)
-        self.assertEqual(result, mock_scan_results)
-        mock_socket.gethostbyname.assert_called_once_with(self.test_ip)
+    def test_invalid_thread_limits(self):
+        for limit, error in ((0, ValueError), (50001, ValueError), (True, TypeError), (2.0, TypeError)):
+            with self.subTest(limit=limit), self.assertRaises(error):
+                PortScanner(thread_limit=limit)
+        scanner = PortScanner(thread_limit=2)
+        with self.assertRaises(ValueError):
+            scanner.thread_limit = 0
+        self.assertEqual(scanner.thread_limit, 2)
 
-    def test_scan_os_error_success(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        mock_socket.inet_aton.side_effect = OSError
-        mock_socket.gethostbyname.return_value = self.test_ip
-        mock_scan_results = {
-            80: 'OPEN',
-            443: 'CLOSE',
-        }
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        # private instance methods in python are name mangled
-        # see https://docs.python.org/3.5/tutorial/classes.html#private-variables
-        scanner._PortScanner__scan_ports = Mock(return_value=mock_scan_results)
-        result = scanner.scan(self.test_host)
-        self.assertEqual(result, mock_scan_results)
-        scanner._PortScanner__scan_ports.assert_called_once_with(self.test_ip, '')
-        mock_socket.gethostbyname.assert_called_once_with(self.test_domain)
+    def test_timeouts(self):
+        scanner = PortScanner(timeout=0.25)
+        self.assertEqual(scanner.timeout_val, 0.25)
+        for timeout in (0, -1, float("inf"), float("nan"), 10**1000):
+            with self.subTest(timeout=timeout), self.assertRaises(ValueError):
+                scanner.timeout_val = timeout
+        with self.assertRaises(TypeError):
+            PortScanner(timeout=True)
+        self.assertEqual(scanner.timeout_val, 0.25)
 
-    def test_scan_socket_error_success(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        mock_socket.inet_aton.side_effect = socket_error
-        mock_socket.gethostbyname.return_value = self.test_ip
-        mock_scan_results = {
-            80: 'OPEN',
-            443: 'CLOSE',
-        }
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        # private instance methods in python are name mangled
-        # see https://docs.python.org/3.5/tutorial/classes.html#private-variables
-        scanner._PortScanner__scan_ports = Mock(return_value=mock_scan_results)
-        result = scanner.scan(self.test_host)
-        self.assertEqual(result, mock_scan_results)
-        scanner._PortScanner__scan_ports.assert_called_once_with(self.test_ip, '')
-        mock_socket.gethostbyname.assert_called_once_with(self.test_domain)
+    @patch("pyportscanner.pyscanner.socket.gethostbyname")
+    def test_empty_scan_and_invalid_targets_do_not_resolve(self, resolve):
+        self.assertEqual(PortScanner([]).scan("localhost"), {})
+        self.assertEqual(PortScanner([8000]).scan("https://[::1"), {})
+        resolve.assert_not_called()
 
-    def test_scan_server_unknown(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        mock_socket.gethostbyname.side_effect = socket_error
-        mock_socket.inet_aton.side_effect = socket_error
-        mock_scan_results = {
-            80: 'OPEN',
-            443: 'CLOSE',
-        }
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        # private instance methods in python are name mangled
-        # see https://docs.python.org/3.5/tutorial/classes.html#private-variables
-        scanner._PortScanner__scan_ports = Mock(return_value=mock_scan_results)
-        result = scanner.scan(self.test_host)
-        self.assertEqual(result, {})
-        scanner._PortScanner__scan_ports.assert_not_called()
-        mock_socket.gethostbyname.assert_called_once_with(self.test_domain)
+    @patch("pyportscanner.pyscanner.socket.gethostbyname")
+    def test_resolution_failure(self, resolve):
+        for error in (socket.gaierror, UnicodeError):
+            with self.subTest(error=error):
+                resolve.reset_mock()
+                resolve.side_effect = error
+                self.assertEqual(PortScanner([8000]).scan("https://localhost:9000/check"), {})
+                resolve.assert_called_once_with("localhost")
 
-    @patch('pyportscanner.pyscanner.concurrent.futures.ThreadPoolExecutor', autospec=True)
-    def test_scan_ports_success(self, mock_executor, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        mock_future1 = Mock(spec=futures.Future)
-        mock_future1.done.return_value = True
-        mock_future1.result.return_value = (80, 'OPEN')
-        mock_future2 = Mock(spec=futures.Future)
-        mock_future2.done.side_effect = [False, True]
-        mock_future2.result.return_value = (443, 'OPEN')
-        mock_executor.return_value.__enter__.return_value.submit.side_effect = [mock_future1, mock_future2]
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        result = scanner._PortScanner__scan_ports(self.test_ip, '')
-        self.assertEqual(result, {80: 'OPEN', 443: 'OPEN'})
+    @patch("pyportscanner.pyscanner.socket.socket")
+    @patch("pyportscanner.pyscanner.socket.gethostbyname", return_value="127.0.0.1")
+    def test_tcp_results_with_one_worker(self, resolve, create_socket):
+        connection = create_socket.return_value
+        connection.connect_ex.side_effect = [0, 1]
+        scanner = PortScanner([8000, 8443], thread_limit=1, timeout=0.25, verbose=True)
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(scanner.scan("https://localhost:9000"), {8000: "OPEN", 8443: "CLOSE"})
+        resolve.assert_called_once_with("localhost")
+        self.assertEqual(
+            [call.args[0] for call in connection.connect_ex.call_args_list],
+            [("127.0.0.1", 8000), ("127.0.0.1", 8443)],
+        )
+        self.assertEqual(connection.close.call_count, 2)
+        self.assertEqual(connection.settimeout.call_args.args, (0.25,))
+        self.assertIn("8000/TCP", output.getvalue())
+        self.assertNotIn("8443/TCP", output.getvalue())
 
-    @patch('pyportscanner.pyscanner.concurrent.futures.ThreadPoolExecutor', autospec=True)
-    def test_scan_ports_exception(self, mock_executor, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        mock_future1 = Mock(spec=futures.Future)
-        mock_future1.done.return_value = True
-        mock_future1.result.return_value = (80, 'OPEN')
-        mock_future2 = Mock(spec=futures.Future)
-        mock_future2.done.side_effect = [False, True]
-        mock_future2.result.side_effect = socket_error
-        mock_executor.return_value.__enter__.return_value.submit.side_effect = [mock_future1, mock_future2]
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        result = scanner._PortScanner__scan_ports(self.test_ip, '')
-        self.assertEqual(result, {80: 'OPEN', 443: 'CLOSE'})
+    @patch("pyportscanner.pyscanner.socket.socket")
+    @patch("pyportscanner.pyscanner.socket.gethostbyname", return_value="127.0.0.1")
+    def test_socket_is_closed_on_setup_and_connect_failure(self, resolve, create_socket):
+        connection = create_socket.return_value
+        for operation in (connection.settimeout, connection.connect_ex):
+            with self.subTest(operation=operation):
+                connection.reset_mock(side_effect=True)
+                operation.side_effect = OSError
+                self.assertEqual(PortScanner([8000]).scan("localhost"), {8000: "CLOSE"})
+                connection.close.assert_called_once_with()
 
-    @patch('pyportscanner.pyscanner.concurrent.futures.ThreadPoolExecutor', autospec=True)
-    def test_scan_ports_thread_limit(self, mock_executor, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        mock_future1 = Mock(spec=futures.Future)
-        mock_future1.done.return_value = True
-        mock_future1.result.return_value = (80, 'OPEN')
-        mock_future2 = Mock(spec=futures.Future)
-        mock_future2.done.side_effect = [False, True]
-        mock_future2.result.side_effect = socket_error
-        mock_executor.return_value.__enter__.return_value.submit.side_effect = [mock_future1, mock_future2]
-        scanner = pyscanner.PortScanner(self.target_ports, 1, self.timeout)
-        result = scanner._PortScanner__scan_ports(self.test_ip, '')
-        self.assertEqual(result, {80: 'OPEN', 443: 'CLOSE'})
+    @patch("pyportscanner.pyscanner.socket.socket")
+    @patch("pyportscanner.pyscanner.socket.gethostbyname", return_value="127.0.0.1")
+    def test_socket_creation_failure(self, resolve, create_socket):
+        create_socket.side_effect = OSError
+        self.assertEqual(PortScanner([8000]).scan("localhost"), {8000: "CLOSE"})
 
-    def test_check_futures_succes(self, mock_read_input, mock_socket):
-        mock_read_input.return_value = self.mock_port_list
-        mock_future1 = Mock(spec=futures.Future)
-        mock_future1.done.return_value = True
-        mock_future1.result.return_value = (80, 'OPEN')
-        mock_future2 = Mock(spec=futures.Future)
-        mock_future2.done.return_value = False
-        test_futures = collections.deque()
-        test_futures.append(mock_future1)
-        test_futures.append(mock_future2)
-        test_output = {
-            80: 'CLOSE',
-            443: 'CLOSE',
-        }
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        scanner._PortScanner__check_futures(test_output, test_futures)
-        self.assertEqual(len(test_futures), 1)
-        self.assertEqual(test_output, {80: 'OPEN', 443: 'CLOSE'})
+    @patch("pyportscanner.pyscanner.socket.socket")
+    @patch("pyportscanner.pyscanner.socket.gethostbyname", return_value="127.0.0.1")
+    def test_legacy_message_is_sent_over_udp_and_open_tcp(self, resolve, create_socket):
+        tcp = Mock()
+        udp = Mock()
+        tcp.connect_ex.return_value = 0
+        create_socket.side_effect = [tcp, udp]
+        self.assertEqual(PortScanner([8000]).scan("localhost", "héllo"), {8000: "OPEN"})
+        udp.sendto.assert_called_once_with("héllo".encode(), ("127.0.0.1", 8000))
+        tcp.sendall.assert_called_once_with("héllo".encode())
+        tcp.close.assert_called_once_with()
+        udp.close.assert_called_once_with()
 
-    @patch('pyportscanner.pyscanner.platform', autospec=True)
-    def test_TCP_connect_open(self, mock_platform, mock_read_input, mock_socket):
-        test_message = 'test_message_djiqojiocn'
-        mock_platform.system.return_value = 'Linux'
-        mock_tcp_socket = Mock(spec=socket.socket)
-        mock_tcp_socket.setsockopt.return_value = None
-        mock_tcp_socket.settimeout.return_value = None
-        # assume the port is open
-        mock_tcp_socket.connect_ex.return_value = 0
-        mock_tcp_socket.sendall.return_value = None
-        mock_tcp_socket.close.return_value = None
-        mock_udp_socket = Mock(spec=socket.socket)
-        mock_udp_socket.sendto.return_value = None
-        mock_socket.socket.side_effect = [mock_tcp_socket, mock_udp_socket]
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        result = scanner._PortScanner__TCP_connect(self.test_ip, 80, test_message)
-        self.assertEqual(result, (80, 'OPEN'))
-        mock_tcp_socket.connect_ex.assert_called_once_with((self.test_ip, 80))
-        mock_tcp_socket.sendall.assert_called_once_with(test_message.encode('utf8'))
-        mock_tcp_socket.close.assert_called_once_with()
-        mock_tcp_socket.settimeout.assert_called_once_with(self.timeout)
-        mock_udp_socket.sendto.assert_called_once_with(test_message.encode('utf8'), (self.test_ip, 80))
-        mock_udp_socket.close.assert_called_once_with()
-
-    @patch('pyportscanner.pyscanner.platform', autospec=True)
-    def test_TCP_connect_close(self, mock_platform, mock_read_input, mock_socket):
-        test_message = 'test_message_djiqojiocn'
-        mock_platform.system.return_value = 'Linux'
-        mock_tcp_socket = Mock(spec=socket.socket)
-        mock_tcp_socket.setsockopt.return_value = None
-        mock_tcp_socket.settimeout.return_value = None
-        # assume the port is close
-        mock_tcp_socket.connect_ex.return_value = 1
-        mock_tcp_socket.sendall.return_value = None
-        mock_tcp_socket.close.return_value = None
-        mock_udp_socket = Mock(spec=socket.socket)
-        mock_udp_socket.sendto.return_value = None
-        mock_socket.socket.side_effect = [mock_tcp_socket, mock_udp_socket]
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        result = scanner._PortScanner__TCP_connect(self.test_ip, 80, test_message)
-        self.assertEqual(result, (80, 'CLOSE'))
-        mock_tcp_socket.connect_ex.assert_called_once_with((self.test_ip, 80))
-        mock_tcp_socket.sendall.assert_not_called()
-        mock_tcp_socket.close.assert_called_once_with()
-        mock_tcp_socket.settimeout.assert_called_once_with(self.timeout)
-        mock_udp_socket.sendto.assert_called_once_with(test_message.encode('utf8'), (self.test_ip, 80))
-        mock_udp_socket.close.assert_called_once_with()
-
-    @patch('pyportscanner.pyscanner.platform', autospec=True)
-    def test_TCP_connect_socket_error(self, mock_platform, mock_read_input, mock_socket):
-        test_message = 'test_message_djiqojiocn'
-        mock_platform.system.return_value = 'Linux'
-        mock_tcp_socket = Mock(spec=socket.socket)
-        mock_tcp_socket.setsockopt.return_value = None
-        mock_tcp_socket.settimeout.return_value = None
-        # assume the port is close
-        mock_tcp_socket.connect_ex.side_effect = socket_error
-        mock_tcp_socket.sendall.return_value = None
-        mock_tcp_socket.close.return_value = None
-        mock_udp_socket = Mock(spec=socket.socket)
-        mock_udp_socket.sendto.return_value = None
-        mock_socket.socket.side_effect = [mock_tcp_socket, mock_udp_socket]
-        scanner = pyscanner.PortScanner(self.target_ports, self.thread_limit, self.timeout)
-        result = scanner._PortScanner__TCP_connect(self.test_ip, 80, test_message)
-        self.assertEqual(result, (80, 'CLOSE'))
-        mock_tcp_socket.connect_ex.assert_called_once_with((self.test_ip, 80))
-        mock_tcp_socket.close.assert_called_once_with()
-        mock_tcp_socket.settimeout.assert_called_once_with(self.timeout)
-        mock_udp_socket.sendto.assert_called_once_with(test_message.encode('utf8'), (self.test_ip, 80))
-        mock_udp_socket.close.assert_called_once_with()
+    def test_loopback_listener(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            try:
+                listener.bind(("127.0.0.1", 0))
+            except PermissionError as error:
+                self.skipTest(f"Loopback bind is unavailable: {error}")
+            listener.listen()
+            host, port = listener.getsockname()
+            scanner = PortScanner([port], timeout=0.5)
+            self.assertEqual(scanner.scan(host), {port: "OPEN"})
